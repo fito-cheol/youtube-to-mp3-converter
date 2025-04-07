@@ -1,0 +1,8 @@
+{
+  "short_name": "YT MP3 Uploader",
+  "name": "YouTube MP3 Drive Uploader",
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#000000",
+  "background_color": "#ffffff"
+} 
