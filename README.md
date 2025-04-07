@@ -13,8 +13,24 @@ A web application that allows users to convert YouTube videos to MP3 files. Buil
 
 Before running this application, make sure you have the following installed:
 - Node.js (v14 or higher)
-- FFmpeg
 - yarn or npm
+
+## FFmpeg Installation
+
+This application requires FFmpeg for audio conversion. Follow these steps to set it up:
+
+1. Download FFmpeg:
+   - Windows: Download from [BtbN's FFmpeg Builds](https://github.com/BtbN/FFmpeg-Builds/releases)
+   - Mac: `brew install ffmpeg`
+   - Linux: `sudo apt-get install ffmpeg`
+
+2. For Windows:
+   - Extract the downloaded zip file
+   - Create a folder named `ffmpeg` in the project root
+   - Copy the contents of the `bin` folder from the extracted files to the `ffmpeg/ffmpeg-master-latest-win64-gpl/bin` directory
+
+3. For Mac/Linux:
+   - Update the FFmpeg path in `server/index.ts` to point to your system's FFmpeg installation
 
 ## Installation
 
