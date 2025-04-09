@@ -1,0 +1,63 @@
+import pytest
+from playwright.sync_api import Page, expect
+import time
+import os
+from datetime import datetime
+
+def test_youtube_to_mp3_conversion(page: Page):
+    # Create snapshots directory if it doesn't exist
+    snapshots_dir = "test_snapshots"
+    if not os.path.exists(snapshots_dir):
+        os.makedirs(snapshots_dir)
+    
+    # Navigate to the converter page
+    page.goto("http://localhost:3000/")
+    
+    # Take initial snapshot
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    page.screenshot(path=f"{snapshots_dir}/initial_state_{timestamp}.png")
+    
+    # Verify the page title
+    expect(page).to_have_title("YouTube MP3 Drive Uploader")
+    
+    # Find the URL input field and enter the YouTube URL
+    url_input = page.get_by_label("YouTube URL")
+    url_input.fill("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+    
+    # Take snapshot after URL input
+    page.screenshot(path=f"{snapshots_dir}/after_url_input_{timestamp}.png")
+    
+    # Click the convert button
+    convert_button = page.get_by_role("button", name="Convert to MP3")
+    convert_button.click()
+    
+    # Wait for conversion to complete (max 5 minutes)
+    max_wait_time = 300  # seconds
+    start_time = time.time()
+    
+    while time.time() - start_time < max_wait_time:
+        # Check if the file appears in the converted files list
+        file_name = "Rick Astley Never Gonna Give You Up Official Music Video.mp3"
+        if page.get_by_text(file_name).is_visible():
+            print(f"File '{file_name}' found in converted files list")
+            # Take snapshot after conversion complete
+            page.screenshot(path=f"{snapshots_dir}/conversion_complete_{timestamp}.png")
+            break
+        time.sleep(2)  # Wait 2 seconds before checking again
+    else:
+        # Take snapshot if conversion failed
+        page.screenshot(path=f"{snapshots_dir}/conversion_failed_{timestamp}.png")
+        raise TimeoutError("Conversion did not complete within the expected time")
+    
+    # Find and click the download button
+    download_button = page.get_by_role("button", name="download")
+    download_button.click()
+    
+    # Wait a moment for the download to start
+    page.wait_for_timeout(2000)  # 2 seconds
+    
+    # Take final snapshot
+    page.screenshot(path=f"{snapshots_dir}/final_state_{timestamp}.png")
+    
+    print("Test completed successfully!")
+    print(f"Snapshots saved in directory: {snapshots_dir}") 

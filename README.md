@@ -84,4 +84,37 @@ Make sure FFmpeg is properly installed and accessible in your system path. The a
 
 ## License
 
-MIT License 
+MIT License
+
+# YouTube to MP3 Converter Test
+
+This is an automated test script for the YouTube to MP3 converter application.
+
+## Setup
+
+1. Install the required dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+2. Install Playwright browsers:
+```bash
+playwright install
+```
+
+## Running the Test
+
+Make sure your converter application is running at `http://localhost:3000`, then run:
+
+```bash
+pytest test_youtube_converter.py -v
+```
+
+The test will:
+1. Navigate to the converter page
+2. Input the YouTube URL
+3. Start the conversion
+4. Wait for the conversion to complete
+5. Download the converted MP3 file
+
+The test has a maximum wait time of 5 minutes for the conversion to complete. 
