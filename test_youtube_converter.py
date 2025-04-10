@@ -24,8 +24,16 @@ def test_youtube_to_mp3_conversion(page: Page):
     url_input = page.get_by_label("YouTube URL")
     url_input.fill("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
     
-    # Take snapshot after URL input
-    page.screenshot(path=f"{snapshots_dir}/after_url_input_{timestamp}.png")
+    # Wait for thumbnail to appear and verify it
+    thumbnail = page.locator('img[alt="Video thumbnail"]')
+    expect(thumbnail).to_be_visible(timeout=5000)
+    
+    # Verify the thumbnail source contains the correct video ID
+    thumbnail_src = thumbnail.get_attribute('src')
+    assert 'dQw4w9WgXcQ' in thumbnail_src, "Thumbnail URL does not contain the correct video ID"
+    
+    # Take snapshot after URL input and thumbnail appears
+    page.screenshot(path=f"{snapshots_dir}/after_url_input_with_thumbnail_{timestamp}.png")
     
     # Click the convert button
     convert_button = page.get_by_role("button", name="Convert to MP3")
@@ -48,6 +56,9 @@ def test_youtube_to_mp3_conversion(page: Page):
         # Take snapshot if conversion failed
         page.screenshot(path=f"{snapshots_dir}/conversion_failed_{timestamp}.png")
         raise TimeoutError("Conversion did not complete within the expected time")
+    
+    # Verify thumbnail is no longer visible after conversion
+    expect(thumbnail).not_to_be_visible(timeout=5000)
     
     # Find and click the download button
     download_button = page.get_by_role("button", name="download")
