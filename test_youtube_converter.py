@@ -32,8 +32,28 @@ def test_youtube_to_mp3_conversion(page: Page):
     thumbnail_src = thumbnail.get_attribute('src')
     assert 'dQw4w9WgXcQ' in thumbnail_src, "Thumbnail URL does not contain the correct video ID"
     
-    # Take snapshot after URL input and thumbnail appears
-    page.screenshot(path=f"{snapshots_dir}/after_url_input_with_thumbnail_{timestamp}.png")
+    # Wait for the time range slider to appear
+    time_slider = page.locator('.MuiSlider-root')
+    expect(time_slider).to_be_visible(timeout=5000)
+    
+    # Verify time range display is visible
+    time_display = page.get_by_text("Select video range:")
+    expect(time_display).to_be_visible()
+    
+    # Take snapshot after URL input and thumbnail appears with time range
+    page.screenshot(path=f"{snapshots_dir}/after_url_input_with_time_range_{timestamp}.png")
+    
+    # Simulate time range selection (set to 30-60 seconds)
+    page.evaluate("""() => {
+        const slider = document.querySelector('.MuiSlider-root');
+        const event = new Event('change');
+        Object.defineProperty(event, 'target', {value: slider});
+        slider.value = [30, 60];
+        slider.dispatchEvent(event);
+    }""")
+    
+    # Take snapshot after time range selection
+    page.screenshot(path=f"{snapshots_dir}/after_time_range_selection_{timestamp}.png")
     
     # Click the convert button
     convert_button = page.get_by_role("button", name="Convert to MP3")
@@ -57,8 +77,9 @@ def test_youtube_to_mp3_conversion(page: Page):
         page.screenshot(path=f"{snapshots_dir}/conversion_failed_{timestamp}.png")
         raise TimeoutError("Conversion did not complete within the expected time")
     
-    # Verify thumbnail is no longer visible after conversion
+    # Verify thumbnail and time range are no longer visible
     expect(thumbnail).not_to_be_visible(timeout=5000)
+    expect(time_slider).not_to_be_visible(timeout=5000)
     
     # Find and click the download button
     download_button = page.get_by_role("button", name="download")

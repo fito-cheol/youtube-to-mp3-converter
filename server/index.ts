@@ -1,8 +1,15 @@
 import express from 'express';
 import cors from 'cors';
+import { exec } from 'child_process';
 import path from 'path';
 import fs from 'fs';
-import youtubeDl from 'youtube-dl-exec';
+import { promisify } from 'util';
+import { fileURLToPath } from 'url';
+import ytdl from 'ytdl-core';
+
+const execAsync = promisify(exec);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -61,73 +68,75 @@ app.get('/api/download/:filename', (req, res) => {
   fileStream.pipe(res);
 });
 
-app.post('/api/convert', async (req, res) => {
+// YouTube 비디오 정보 가져오기
+app.post('/api/video-info', async (req, res) => {
   try {
     const { url } = req.body;
-    if (!url) {
-      return res.status(400).json({ error: 'URL is required' });
-    }
-
-    console.log(`Processing URL: ${url}`);
-
-    // Fix URL if it has @ prefix
-    const cleanUrl = url.startsWith('@') ? url.substring(1) : url;
+    const info = await ytdl.getInfo(url);
+    const duration = parseInt(info.videoDetails.lengthSeconds);
     
-    if (!isValidYouTubeUrl(cleanUrl)) {
-      return res.status(400).json({ error: 'Invalid YouTube URL' });
-    }
-
-    // Extract video ID for naming
-    const videoId = extractVideoId(cleanUrl);
-    console.log(`Video ID: ${videoId}`);
-
-    if (!videoId) {
-      return res.status(400).json({ error: 'Could not extract video ID' });
-    }
-
-    try {
-      // Get video info
-      const info = await youtubeDl(cleanUrl, {
-        dumpSingleJson: true,
-        noWarnings: true,
-        preferFreeFormats: true,
-        youtubeSkipDashManifest: true,
-        ffmpegLocation: ffmpegPath
-      });
-
-      // Use title from info or fallback to video ID
-      const videoInfo = info as any;
-      const safeTitle = (videoInfo.title ? videoInfo.title.toString().replace(/[^\w\s]/gi, '') : videoId);
-      const outputPath = path.join(uploadsDir, `${safeTitle}.mp3`);
-      console.log(`Output path: ${outputPath}`);
-
-      // Download audio
-      await youtubeDl(cleanUrl, {
-        extractAudio: true,
-        audioFormat: 'mp3',
-        audioQuality: 0, // best
-        output: outputPath,
-        noWarnings: true,
-        ffmpegLocation: ffmpegPath
-      });
-
-      console.log('Download completed');
-      
-      res.json({ 
-        filePath: `/api/download/${safeTitle}.mp3`,
-        fileName: `${safeTitle}.mp3`
-      });
-    } catch (error) {
-      console.error('Error downloading video:', error);
-      res.status(500).json({ 
-        error: 'Failed to download video: ' + getErrorMessage(error)
-      });
-    }
-  } catch (error) {
-    console.error('Server error:', error);
-    res.status(500).json({ 
-      error: 'Server error: ' + getErrorMessage(error)
+    res.json({
+      duration,
+      title: info.videoDetails.title
     });
+  } catch (error) {
+    console.error('Error fetching video info:', error);
+    res.status(500).json({ error: 'Failed to fetch video information' });
+  }
+});
+
+app.post('/api/convert', async (req, res) => {
+  try {
+    const { url, startTime = 0, endTime } = req.body;
+    
+    // 비디오 정보 가져오기
+    const info = await ytdl.getInfo(url);
+    const videoTitle = info.videoDetails.title.replace(/[^\w\s]/gi, '');
+    const outputPath = path.join(uploadsDir, `${videoTitle}.mp3`);
+    
+    // FFmpeg 명령어 구성
+    let ffmpegCommand = `ffmpeg -i pipe:0 -vn -acodec libmp3lame`;
+    
+    // 시작 시간과 종료 시간이 지정된 경우 추가
+    if (startTime > 0) {
+      ffmpegCommand += ` -ss ${startTime}`;
+    }
+    if (endTime && endTime > startTime) {
+      ffmpegCommand += ` -t ${endTime - startTime}`;
+    }
+    
+    ffmpegCommand += ` "${outputPath}"`;
+    
+    // YouTube 스트림 생성 및 FFmpeg로 변환
+    const stream = ytdl(url, {
+      quality: 'highestaudio',
+      filter: 'audioonly',
+    });
+    
+    const ffmpeg = exec(ffmpegCommand);
+    
+    stream.pipe(ffmpeg.stdin);
+    
+    await new Promise((resolve, reject) => {
+      ffmpeg.on('close', (code) => {
+        if (code === 0) {
+          resolve(code);
+        } else {
+          reject(new Error(`FFmpeg process exited with code ${code}`));
+        }
+      });
+      
+      ffmpeg.on('error', (err) => {
+        reject(err);
+      });
+    });
+    
+    const relativePath = path.relative(__dirname, outputPath).replace(/\\/g, '/');
+    res.json({ filePath: '/downloads/' + path.basename(outputPath) });
+    
+  } catch (error) {
+    console.error('Error converting video:', error);
+    res.status(500).json({ error: 'Failed to convert video' });
   }
 });
 
