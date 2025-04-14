@@ -19,7 +19,9 @@
     "@types/react-dom": "^19.1.2",
     "axios": "^1.8.4",
     "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
     "express": "4.18.2",
+    "googleapis": "^148.0.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-scripts": "5.0.1",
@@ -33,7 +35,7 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "server": "ts-node server/index.ts"
+    "server": "cross-env NODE_ENV=development ts-node -P tsconfig.server.json server/index.ts"
   },
   "eslintConfig": {
     "extends": [
@@ -56,6 +58,7 @@
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
     "cross-spawn": "^7.0.6",
     "ts-node": "^10.9.2",
     "which": "^5.0.0"
