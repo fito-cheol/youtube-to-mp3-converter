@@ -131,51 +131,91 @@ function convertYouTubeDuration(duration: string): number {
          parseInt(seconds || '0');
 }
 
+// 초를 HH:MM:SS 형식으로 변환하는 함수
+function formatTime(seconds: number): string {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const remainingSeconds = Math.floor(seconds % 60);
+  
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+}
+
 app.post('/api/convert', async (req: Request, res: Response) => {
   try {
     const { url, startTime = 0, endTime } = req.body;
     
-    console.log('Converting with parameters:', { startTime, endTime });
+    console.log('=== 변환 시작 ===');
+    console.log('요청 파라미터:', { url, startTime, endTime });
     
     // 비디오 정보 가져오기
+    console.log('1. YouTube 비디오 정보 가져오는 중...');
     const info = await youtubeDl(url, {
       ...defaultOptions,
       dumpSingleJson: true
     });
+    console.log('비디오 정보:', { 
+      title: info.title,
+      duration: info.duration,
+      format: info.format
+    });
     
     const videoTitle = info.title.replace(/[^\w\s]/gi, '');
-    const outputPath = path.join(uploadsDir, `${videoTitle}.mp3`);
-    // youtube-dl로 직접 오디오 추출
-    // youtube-dl 옵션 설명:
-    // extractAudio: true - 비디오에서 오디오만 추출
-    // audioFormat: 'mp3' - 추출할 오디오 포맷 지정
-    // output: 저장할 파일 경로와 이름
-    // postprocessorArgs: ffmpeg에 전달할 인자들
-    //   -ss: 시작 시간 (초 단위)
-    //   -t: 추출할 구간 길이 (초 단위)
-    // await youtubeDl(url, {
-    //   extractAudio: true,
-    //   audioFormat: 'mp3',
-    //   postprocessorArgs: [
-    //     '-ss', '30',  // 시작 시간
-    //     '-t', '60'    // 길이
-    //   ]
-    // })
+    const fullOutputPath = path.join(uploadsDir, `${videoTitle}_full.mp3`);
+    const finalOutputPath = path.join(uploadsDir, `${videoTitle}.mp3`);
+    console.log('생성될 파일 경로:', {
+      임시파일: fullOutputPath,
+      최종파일: finalOutputPath
+    });
+
+    // 1. 전체 영상을 MP3로 다운로드
+    console.log('2. MP3 다운로드 시작...');
     await youtubeDl(url, {
       ...defaultOptions,
       extractAudio: true,
       audioFormat: 'mp3',
-      output: outputPath,
-      postprocessorArgs: [
-        '-ss', String(startTime),
-        ...(endTime && endTime > startTime ? ['-t', String(endTime - startTime)] : [])
-      ]
+      output: fullOutputPath
     });
+    console.log('MP3 다운로드 완료');
+
+    // 2. FFmpeg로 구간 자르기
+    console.log('3. FFmpeg로 구간 자르기 시작...');
+    const duration = endTime && endTime > startTime ? endTime - startTime : undefined;
+    const ffmpegArgs = [
+      '-i', fullOutputPath,
+      '-ss', formatTime(startTime),
+      ...(duration ? ['-t', String(duration)] : []),
+      '-acodec', 'copy',
+      finalOutputPath
+    ];
     
-    res.json({ filePath: '/downloads/' + path.basename(outputPath) });
-    
+    console.log('FFmpeg 명령어:', `${ffmpegPath} ${ffmpegArgs.join(' ')}`);
+
+    try {
+      await execAsync(`"${ffmpegPath}" ${ffmpegArgs.join(' ')}`);
+      console.log('구간 자르기 완료');
+      
+      // 전체 파일 삭제
+      fs.unlinkSync(fullOutputPath);
+      console.log('임시 파일 삭제 완료');
+      
+      console.log('=== 변환 완료 ===');
+      res.json({ filePath: '/downloads/' + path.basename(finalOutputPath) });
+    } catch (ffmpegError) {
+      console.error('FFmpeg 에러 발생:', ffmpegError);
+      res.status(500).json({ error: 'Failed to trim audio' });
+      // 에러 발생시 임시 파일들 정리
+      if (fs.existsSync(fullOutputPath)) {
+        fs.unlinkSync(fullOutputPath);
+        console.log('에러 발생: 임시 파일 삭제됨');
+      }
+      if (fs.existsSync(finalOutputPath)) {
+        fs.unlinkSync(finalOutputPath);
+        console.log('에러 발생: 최종 파일 삭제됨');
+      }
+    }
   } catch (error) {
-    console.error('Error converting video:', error);
+    console.error('=== 변환 실패 ===');
+    console.error('에러 상세:', error);
     res.status(500).json({ error: 'Failed to convert video' });
   }
 });
