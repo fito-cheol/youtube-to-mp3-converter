@@ -181,17 +181,20 @@ app.post('/api/convert', async (req: Request, res: Response) => {
     console.log('3. FFmpeg로 구간 자르기 시작...');
     const duration = endTime && endTime > startTime ? endTime - startTime : undefined;
     const ffmpegArgs = [
-      '-i', fullOutputPath,
+      '-i', `"${fullOutputPath}"`,
       '-ss', formatTime(startTime),
       ...(duration ? ['-t', String(duration)] : []),
       '-acodec', 'copy',
-      finalOutputPath
+      `"${finalOutputPath}"`
     ];
     
     console.log('FFmpeg 명령어:', `${ffmpegPath} ${ffmpegArgs.join(' ')}`);
 
     try {
-      await execAsync(`"${ffmpegPath}" ${ffmpegArgs.join(' ')}`);
+      // Windows에서 경로에 공백이 있을 때 처리
+      const command = `"${ffmpegPath}" ${ffmpegArgs.join(' ')}`;
+      console.log('실행할 명령어:', command);
+      await execAsync(command);
       console.log('구간 자르기 완료');
       
       // 전체 파일 삭제
