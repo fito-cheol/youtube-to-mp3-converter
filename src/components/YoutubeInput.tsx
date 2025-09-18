@@ -18,6 +18,7 @@ export const YoutubeInput: React.FC<YoutubeInputProps> = ({ onFileConverted }) =
   const [thumbnail, setThumbnail] = useState<string | null>(null);
   const [videoDuration, setVideoDuration] = useState<number>(0);
   const [timeRange, setTimeRange] = useState<TimeRange>({ start: 0, end: 0 });
+  const [queue, setQueue] = useState<Array<{ url: string; timeRange: TimeRange }>>([]);
 
   const extractVideoId = (url: string) => {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
@@ -57,25 +58,15 @@ export const YoutubeInput: React.FC<YoutubeInputProps> = ({ onFileConverted }) =
     e.preventDefault();
     if (!url) return;
 
-    setLoading(true);
-    setError(null);
-    try {
-      const response = await axios.post('http://localhost:3001/api/convert', { 
-        url,
-        startTime: timeRange.start,
-        endTime: timeRange.end
-      });
-      onFileConverted(response.data.filePath);
-      setUrl('');
-      setThumbnail(null);
-      setVideoDuration(0);
-      setTimeRange({ start: 0, end: 0 });
-    } catch (error) {
-      console.error('Error converting video:', error);
-      setError('Failed to convert video. Please check the URL and try again.');
-    } finally {
-      setLoading(false);
-    }
+    // Enqueue current input
+    const item = { url, timeRange: { ...timeRange } };
+    setQueue(prev => [...prev, item]);
+
+    // Reset input for next entry
+    setUrl('');
+    setThumbnail(null);
+    setVideoDuration(0);
+    setTimeRange({ start: 0, end: 0 });
   };
 
   const handleTimeRangeChange = (event: Event, newValue: number | number[]) => {
@@ -83,6 +74,32 @@ export const YoutubeInput: React.FC<YoutubeInputProps> = ({ onFileConverted }) =
       setTimeRange({ start: newValue[0], end: newValue[1] });
     }
   };
+
+  // Process queue sequentially
+  useEffect(() => {
+    const processNext = async () => {
+      if (loading || queue.length === 0) return;
+      setError(null);
+      setLoading(true);
+      const next = queue[0];
+      try {
+        const response = await axios.post('http://localhost:3001/api/convert', {
+          url: next.url,
+          startTime: next.timeRange.start,
+          endTime: next.timeRange.end
+        });
+        onFileConverted(response.data.filePath);
+      } catch (err) {
+        console.error('Error converting video:', err);
+        setError('Failed to convert a queued video. Continuing with next item.');
+      } finally {
+        setQueue(prev => prev.slice(1));
+        setLoading(false);
+      }
+    };
+    processNext();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue, loading]);
 
   return (
     <Box component="form" onSubmit={handleSubmit} sx={{ mb: 4 }}>
@@ -92,7 +109,6 @@ export const YoutubeInput: React.FC<YoutubeInputProps> = ({ onFileConverted }) =
         variant="outlined"
         value={url}
         onChange={(e) => setUrl(e.target.value)}
-        disabled={loading}
         sx={{ mb: 2 }}
         placeholder="https://www.youtube.com/watch?v=..."
       />
@@ -127,14 +143,19 @@ export const YoutubeInput: React.FC<YoutubeInputProps> = ({ onFileConverted }) =
           {error}
         </Alert>
       )}
+      {!!queue.length && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          In queue: {queue.length} {queue.length === 1 ? 'item' : 'items'} {loading ? '(processing...)' : ''}
+        </Alert>
+      )}
       <Button
         type="submit"
         variant="contained"
         color="primary"
-        disabled={loading || !url}
+        disabled={!url}
         startIcon={loading ? <CircularProgress size={20} color="inherit" /> : null}
       >
-        Convert to MP3
+        {loading ? 'Add to Queue' : 'Convert / Add to Queue'}
       </Button>
     </Box>
   );

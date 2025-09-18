@@ -31,11 +31,12 @@
     "ytdl-core": "^4.11.5"
   },
   "scripts": {
-    "start": "react-scripts start",
+    "start": "npm run dev",
+    "dev": "cross-env PORT=3000 react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "server": "cross-env NODE_ENV=development ts-node -P tsconfig.server.json server/index.ts"
+    "server": "cross-env NODE_ENV=development BACK_PORT=3001 ts-node -P tsconfig.server.json server/index.ts"
   },
   "eslintConfig": {
     "extends": [

@@ -13,6 +13,24 @@ const execAsync = promisify(exec);
 const app = express();
 const port = process.env.BACK_PORT || 3001;
 
+// Sanitize a string to a safe Windows filename while preserving non-ASCII letters (e.g., Korean)
+function sanitizeFilename(name: string): string {
+  // Remove illegal characters for Windows filenames and control chars
+  const removedIllegal = name
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
+    // Collapse whitespace
+    .replace(/\s+/g, ' ')
+    // Trim spaces
+    .trim()
+    // Remove trailing dots and spaces which are not allowed
+    .replace(/[\. ]+$/g, '');
+
+  // Fallback if empty after sanitization
+  const fallback = removedIllegal || 'audio';
+  // Limit length to avoid very long filenames
+  return fallback.slice(0, 120);
+}
+
 // YouTube API 설정
 const youtube = google.youtube('v3');
 const API_KEY = process.env.YOUTUBE_API_KEY;
@@ -159,7 +177,7 @@ app.post('/api/convert', async (req: Request, res: Response) => {
       format: info.format
     });
     
-    const videoTitle = info.title.replace(/[^\w\s]/gi, '');
+    const videoTitle = sanitizeFilename(info.title);
     const fullOutputPath = path.join(uploadsDir, `${videoTitle}_full.mp3`);
     const finalOutputPath = path.join(uploadsDir, `${videoTitle}.mp3`);
     console.log('생성될 파일 경로:', {
