@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TextField, Button, Box, CircularProgress, Alert, Card, CardMedia, Slider, Typography } from '@mui/material';
+import { TextField, Button, Box, CircularProgress, Alert, Card, CardMedia, Slider, Typography, List, ListItem, ListItemText, ListItemButton, Checkbox, Divider } from '@mui/material';
 import axios from 'axios';
 
 interface YoutubeInputProps {
@@ -11,6 +11,19 @@ interface TimeRange {
   end: number;
 }
 
+interface PlaylistVideo {
+  videoId: string;
+  title: string;
+  url: string;
+  duration: number;
+}
+
+interface PlaylistInfo {
+  playlistId: string;
+  videos: PlaylistVideo[];
+  totalVideos: number;
+}
+
 export const YoutubeInput: React.FC<YoutubeInputProps> = ({ onFileConverted }) => {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,11 +32,24 @@ export const YoutubeInput: React.FC<YoutubeInputProps> = ({ onFileConverted }) =
   const [videoDuration, setVideoDuration] = useState<number>(0);
   const [timeRange, setTimeRange] = useState<TimeRange>({ start: 0, end: 0 });
   const [queue, setQueue] = useState<Array<{ url: string; timeRange: TimeRange }>>([]);
+  const [playlistInfo, setPlaylistInfo] = useState<PlaylistInfo | null>(null);
+  const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set());
+  const [isPlaylist, setIsPlaylist] = useState(false);
 
   const extractVideoId = (url: string) => {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
     const match = url.match(regExp);
     return match && match[2].length === 11 ? match[2] : null;
+  };
+
+  const extractPlaylistId = (url: string) => {
+    const playlistRegex = /[?&]list=([^&]+)/;
+    const match = url.match(playlistRegex);
+    return match ? match[1] : null;
+  };
+
+  const isPlaylistUrl = (url: string) => {
+    return extractPlaylistId(url) !== null;
   };
 
   const formatTime = (seconds: number): string => {
@@ -33,10 +59,37 @@ export const YoutubeInput: React.FC<YoutubeInputProps> = ({ onFileConverted }) =
   };
 
   useEffect(() => {
+    const playlistId = extractPlaylistId(url);
     const videoId = extractVideoId(url);
-    if (videoId) {
+    
+    if (playlistId) {
+      // Handle playlist URL
+      setIsPlaylist(true);
+      setThumbnail(null);
+      setVideoDuration(0);
+      setTimeRange({ start: 0, end: 0 });
+      setPlaylistInfo(null);
+      setSelectedVideos(new Set());
+      
+      const fetchPlaylistInfo = async () => {
+        try {
+          const response = await axios.post('http://localhost:3001/api/playlist-info', { url });
+          setPlaylistInfo(response.data);
+          // Select all videos by default
+          setSelectedVideos(new Set(response.data.videos.map((v: PlaylistVideo) => v.videoId)));
+        } catch (error) {
+          console.error('Error fetching playlist info:', error);
+          setError('Failed to fetch playlist information');
+        }
+      };
+      fetchPlaylistInfo();
+    } else if (videoId) {
+      // Handle single video URL
+      setIsPlaylist(false);
+      setPlaylistInfo(null);
+      setSelectedVideos(new Set());
       setThumbnail(`https://img.youtube.com/vi/${videoId}/hqdefault.jpg`);
-      // YouTube API를 통해 영상 길이 가져오기
+      
       const fetchVideoDuration = async () => {
         try {
           const response = await axios.post('http://localhost:3001/api/video-info', { url });
@@ -48,9 +101,12 @@ export const YoutubeInput: React.FC<YoutubeInputProps> = ({ onFileConverted }) =
       };
       fetchVideoDuration();
     } else {
+      setIsPlaylist(false);
       setThumbnail(null);
       setVideoDuration(0);
       setTimeRange({ start: 0, end: 0 });
+      setPlaylistInfo(null);
+      setSelectedVideos(new Set());
     }
   }, [url]);
 
@@ -58,20 +114,52 @@ export const YoutubeInput: React.FC<YoutubeInputProps> = ({ onFileConverted }) =
     e.preventDefault();
     if (!url) return;
 
-    // Enqueue current input
-    const item = { url, timeRange: { ...timeRange } };
-    setQueue(prev => [...prev, item]);
+    if (isPlaylist && playlistInfo) {
+      // Add selected videos from playlist to queue
+      const selectedVideoUrls = playlistInfo.videos
+        .filter(video => selectedVideos.has(video.videoId))
+        .map(video => ({ url: video.url, timeRange: { start: 0, end: video.duration } }));
+      
+      setQueue(prev => [...prev, ...selectedVideoUrls]);
+    } else {
+      // Enqueue single video
+      const item = { url, timeRange: { ...timeRange } };
+      setQueue(prev => [...prev, item]);
+    }
 
     // Reset input for next entry
     setUrl('');
     setThumbnail(null);
     setVideoDuration(0);
     setTimeRange({ start: 0, end: 0 });
+    setPlaylistInfo(null);
+    setSelectedVideos(new Set());
+    setIsPlaylist(false);
   };
 
   const handleTimeRangeChange = (event: Event, newValue: number | number[]) => {
     if (Array.isArray(newValue)) {
       setTimeRange({ start: newValue[0], end: newValue[1] });
+    }
+  };
+
+  const handleVideoSelection = (videoId: string) => {
+    const newSelected = new Set(selectedVideos);
+    if (newSelected.has(videoId)) {
+      newSelected.delete(videoId);
+    } else {
+      newSelected.add(videoId);
+    }
+    setSelectedVideos(newSelected);
+  };
+
+  const handleSelectAll = () => {
+    if (playlistInfo) {
+      if (selectedVideos.size === playlistInfo.videos.length) {
+        setSelectedVideos(new Set());
+      } else {
+        setSelectedVideos(new Set(playlistInfo.videos.map(v => v.videoId)));
+      }
     }
   };
 
@@ -105,14 +193,54 @@ export const YoutubeInput: React.FC<YoutubeInputProps> = ({ onFileConverted }) =
     <Box component="form" onSubmit={handleSubmit} sx={{ mb: 4 }}>
       <TextField
         fullWidth
-        label="YouTube URL"
+        label="YouTube URL (Video or Playlist)"
         variant="outlined"
         value={url}
         onChange={(e) => setUrl(e.target.value)}
         sx={{ mb: 2 }}
-        placeholder="https://www.youtube.com/watch?v=..."
+        placeholder="https://www.youtube.com/watch?v=... or https://www.youtube.com/playlist?list=..."
       />
-      {thumbnail && (
+      
+      {isPlaylist && playlistInfo && (
+        <Card sx={{ mb: 2 }}>
+          <Box sx={{ p: 2 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h6">
+                Playlist: {playlistInfo.totalVideos} videos
+              </Typography>
+              <Button
+                variant="outlined"
+                size="small"
+                onClick={handleSelectAll}
+              >
+                {selectedVideos.size === playlistInfo.videos.length ? 'Deselect All' : 'Select All'}
+              </Button>
+            </Box>
+            <List sx={{ maxHeight: 300, overflow: 'auto' }}>
+              {playlistInfo.videos.map((video, index) => (
+                <ListItem key={video.videoId} disablePadding>
+                  <ListItemButton
+                    onClick={() => handleVideoSelection(video.videoId)}
+                    sx={{ py: 1 }}
+                  >
+                    <Checkbox
+                      checked={selectedVideos.has(video.videoId)}
+                      onChange={() => handleVideoSelection(video.videoId)}
+                    />
+                    <ListItemText
+                      primary={video.title}
+                      secondary={`${formatTime(video.duration)} • ${index + 1}/${playlistInfo.totalVideos}`}
+                      sx={{ ml: 1 }}
+                    />
+                  </ListItemButton>
+                </ListItem>
+              ))}
+            </List>
+          </Box>
+        </Card>
+      )}
+
+      {!isPlaylist && thumbnail && (
         <Card sx={{ mb: 2, maxWidth: 480, mx: 'auto' }}>
           <CardMedia
             component="img"
@@ -152,10 +280,15 @@ export const YoutubeInput: React.FC<YoutubeInputProps> = ({ onFileConverted }) =
         type="submit"
         variant="contained"
         color="primary"
-        disabled={!url}
+        disabled={!url || (isPlaylist && selectedVideos.size === 0)}
         startIcon={loading ? <CircularProgress size={20} color="inherit" /> : null}
       >
-        {loading ? 'Add to Queue' : 'Convert / Add to Queue'}
+        {isPlaylist 
+          ? `Add ${selectedVideos.size} Selected Videos to Queue`
+          : loading 
+            ? 'Add to Queue' 
+            : 'Convert / Add to Queue'
+        }
       </Button>
     </Box>
   );

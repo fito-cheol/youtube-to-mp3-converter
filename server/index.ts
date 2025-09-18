@@ -79,6 +79,18 @@ function extractVideoId(url: string): string | null {
   return (match && match[2].length === 11) ? match[2] : null;
 }
 
+// Function to extract playlist ID from YouTube URL
+function extractPlaylistId(url: string): string | null {
+  const playlistRegex = /[?&]list=([^&]+)/;
+  const match = url.match(playlistRegex);
+  return match ? match[1] : null;
+}
+
+// Function to check if URL is a playlist
+function isPlaylistUrl(url: string): boolean {
+  return extractPlaylistId(url) !== null;
+}
+
 // Helper function to get error message from unknown error
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
@@ -108,6 +120,12 @@ app.get('/api/download/:filename', (req: Request, res: Response) => {
 app.post('/api/video-info', async (req: Request, res: Response) => {
   try {
     const { url } = req.body;
+    
+    // Check if it's a playlist URL
+    if (isPlaylistUrl(url)) {
+      return res.status(400).json({ error: 'Please use /api/playlist-info for playlist URLs' });
+    }
+    
     const videoId = extractVideoId(url);
     
     if (!videoId) {
@@ -135,6 +153,62 @@ app.post('/api/video-info', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error fetching video info:', error);
     res.status(500).json({ error: 'Failed to fetch video information' });
+  }
+});
+
+// YouTube 재생목록 정보 가져오기
+app.post('/api/playlist-info', async (req: Request, res: Response) => {
+  try {
+    const { url } = req.body;
+    const playlistId = extractPlaylistId(url);
+    
+    if (!playlistId) {
+      return res.status(400).json({ error: 'Invalid playlist URL' });
+    }
+
+    // YouTube Data API를 사용하여 재생목록 정보 가져오기
+    const response = await youtube.playlistItems.list({
+      key: API_KEY,
+      part: ['snippet'],
+      playlistId: playlistId,
+      maxResults: 50
+    });
+
+    if (!response.data.items || response.data.items.length === 0) {
+      return res.status(404).json({ error: 'Playlist not found or empty' });
+    }
+
+    const videos = response.data.items.map((item: any) => ({
+      videoId: item.snippet.resourceId.videoId,
+      title: item.snippet.title,
+      url: `https://www.youtube.com/watch?v=${item.snippet.resourceId.videoId}`
+    }));
+
+    // Get video durations
+    const videoIds = videos.map((v: any) => v.videoId);
+    const videoResponse = await youtube.videos.list({
+      key: API_KEY,
+      part: ['contentDetails'],
+      id: videoIds
+    });
+
+    const videosWithDuration = videos.map((video: any) => {
+      const videoDetail = videoResponse.data.items?.find((item: any) => item.id === video.videoId);
+      const duration = videoDetail ? convertYouTubeDuration(videoDetail.contentDetails.duration) : 0;
+      return {
+        ...video,
+        duration
+      };
+    });
+    
+    res.json({
+      playlistId,
+      videos: videosWithDuration,
+      totalVideos: videosWithDuration.length
+    });
+  } catch (error) {
+    console.error('Error fetching playlist info:', error);
+    res.status(500).json({ error: 'Failed to fetch playlist information' });
   }
 });
 
