@@ -166,40 +166,78 @@ app.post('/api/playlist-info', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Invalid playlist URL' });
     }
 
-    // YouTube Data API를 사용하여 재생목록 정보 가져오기
-    const response = await youtube.playlistItems.list({
-      key: API_KEY,
-      part: ['snippet'],
-      playlistId: playlistId,
-      maxResults: 50
-    });
+    console.log(`Fetching playlist: ${playlistId}`);
+    
+    // 모든 비디오를 가져오기 위해 페이지네이션 사용
+    let allVideos: any[] = [];
+    let nextPageToken: string | undefined = undefined;
+    let pageCount = 0;
+    const maxPages = 20; // 최대 1000개 비디오 (50 * 20)
 
-    if (!response.data.items || response.data.items.length === 0) {
+    do {
+      pageCount++;
+      console.log(`Fetching page ${pageCount}...`);
+      
+      const response: any = await youtube.playlistItems.list({
+        key: API_KEY,
+        part: ['snippet'],
+        playlistId: playlistId,
+        maxResults: 50,
+        pageToken: nextPageToken
+      });
+
+      if (!response.data.items || response.data.items.length === 0) {
+        break;
+      }
+
+      allVideos = allVideos.concat(response.data.items);
+      nextPageToken = response.data.nextPageToken;
+      
+      console.log(`Page ${pageCount}: ${response.data.items.length} videos, total: ${allVideos.length}`);
+      
+    } while (nextPageToken && pageCount < maxPages);
+
+    if (allVideos.length === 0) {
       return res.status(404).json({ error: 'Playlist not found or empty' });
     }
 
-    const videos = response.data.items.map((item: any) => ({
+    console.log(`Total videos found: ${allVideos.length}`);
+
+    const videos = allVideos.map((item: any) => ({
       videoId: item.snippet.resourceId.videoId,
       title: item.snippet.title,
       url: `https://www.youtube.com/watch?v=${item.snippet.resourceId.videoId}`
     }));
 
-    // Get video durations
-    const videoIds = videos.map((v: any) => v.videoId);
-    const videoResponse = await youtube.videos.list({
-      key: API_KEY,
-      part: ['contentDetails'],
-      id: videoIds
-    });
+    // Get video durations in batches (YouTube API allows max 50 IDs per request)
+    const videosWithDuration: any[] = [];
+    const batchSize = 50;
+    
+    for (let i = 0; i < videos.length; i += batchSize) {
+      const batch = videos.slice(i, i + batchSize);
+      const videoIds = batch.map((v: any) => v.videoId);
+      
+      console.log(`Fetching durations for batch ${Math.floor(i/batchSize) + 1}/${Math.ceil(videos.length/batchSize)}...`);
+      
+      const videoResponse: any = await youtube.videos.list({
+        key: API_KEY,
+        part: ['contentDetails'],
+        id: videoIds
+      });
 
-    const videosWithDuration = videos.map((video: any) => {
-      const videoDetail = videoResponse.data.items?.find((item: any) => item.id === video.videoId);
-      const duration = videoDetail ? convertYouTubeDuration(videoDetail.contentDetails.duration) : 0;
-      return {
-        ...video,
-        duration
-      };
-    });
+      const batchWithDuration = batch.map((video: any) => {
+        const videoDetail = videoResponse.data.items?.find((item: any) => item.id === video.videoId);
+        const duration = videoDetail ? convertYouTubeDuration(videoDetail.contentDetails.duration) : 0;
+        return {
+          ...video,
+          duration
+        };
+      });
+      
+      videosWithDuration.push(...batchWithDuration);
+    }
+    
+    console.log(`Successfully processed ${videosWithDuration.length} videos`);
     
     res.json({
       playlistId,

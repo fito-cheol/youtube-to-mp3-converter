@@ -35,6 +35,7 @@ export const YoutubeInput: React.FC<YoutubeInputProps> = ({ onFileConverted }) =
   const [playlistInfo, setPlaylistInfo] = useState<PlaylistInfo | null>(null);
   const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set());
   const [isPlaylist, setIsPlaylist] = useState(false);
+  const [loadingPlaylist, setLoadingPlaylist] = useState(false);
 
   const extractVideoId = (url: string) => {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
@@ -73,6 +74,8 @@ export const YoutubeInput: React.FC<YoutubeInputProps> = ({ onFileConverted }) =
       
       const fetchPlaylistInfo = async () => {
         try {
+          setLoadingPlaylist(true);
+          setError(null);
           const response = await axios.post('http://localhost:3001/api/playlist-info', { url });
           setPlaylistInfo(response.data);
           // Select all videos by default
@@ -80,6 +83,8 @@ export const YoutubeInput: React.FC<YoutubeInputProps> = ({ onFileConverted }) =
         } catch (error) {
           console.error('Error fetching playlist info:', error);
           setError('Failed to fetch playlist information');
+        } finally {
+          setLoadingPlaylist(false);
         }
       };
       fetchPlaylistInfo();
@@ -132,9 +137,10 @@ export const YoutubeInput: React.FC<YoutubeInputProps> = ({ onFileConverted }) =
     setThumbnail(null);
     setVideoDuration(0);
     setTimeRange({ start: 0, end: 0 });
-    setPlaylistInfo(null);
-    setSelectedVideos(new Set());
-    setIsPlaylist(false);
+      setPlaylistInfo(null);
+      setSelectedVideos(new Set());
+      setIsPlaylist(false);
+      setLoadingPlaylist(false);
   };
 
   const handleTimeRangeChange = (event: Event, newValue: number | number[]) => {
@@ -201,41 +207,50 @@ export const YoutubeInput: React.FC<YoutubeInputProps> = ({ onFileConverted }) =
         placeholder="https://www.youtube.com/watch?v=... or https://www.youtube.com/playlist?list=..."
       />
       
-      {isPlaylist && playlistInfo && (
+      {isPlaylist && (
         <Card sx={{ mb: 2 }}>
           <Box sx={{ p: 2 }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">
-                Playlist: {playlistInfo.totalVideos} videos
-              </Typography>
-              <Button
-                variant="outlined"
-                size="small"
-                onClick={handleSelectAll}
-              >
-                {selectedVideos.size === playlistInfo.videos.length ? 'Deselect All' : 'Select All'}
-              </Button>
-            </Box>
-            <List sx={{ maxHeight: 300, overflow: 'auto' }}>
-              {playlistInfo.videos.map((video, index) => (
-                <ListItem key={video.videoId} disablePadding>
-                  <ListItemButton
-                    onClick={() => handleVideoSelection(video.videoId)}
-                    sx={{ py: 1 }}
+            {loadingPlaylist ? (
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: 4 }}>
+                <CircularProgress sx={{ mr: 2 }} />
+                <Typography>Loading playlist videos...</Typography>
+              </Box>
+            ) : playlistInfo ? (
+              <>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="h6">
+                    Playlist: {playlistInfo.totalVideos} videos
+                  </Typography>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    onClick={handleSelectAll}
                   >
-                    <Checkbox
-                      checked={selectedVideos.has(video.videoId)}
-                      onChange={() => handleVideoSelection(video.videoId)}
-                    />
-                    <ListItemText
-                      primary={video.title}
-                      secondary={`${formatTime(video.duration)} • ${index + 1}/${playlistInfo.totalVideos}`}
-                      sx={{ ml: 1 }}
-                    />
-                  </ListItemButton>
-                </ListItem>
-              ))}
-            </List>
+                    {selectedVideos.size === playlistInfo.videos.length ? 'Deselect All' : 'Select All'}
+                  </Button>
+                </Box>
+                <List sx={{ maxHeight: 300, overflow: 'auto' }}>
+                  {playlistInfo.videos.map((video, index) => (
+                    <ListItem key={video.videoId} disablePadding>
+                      <ListItemButton
+                        onClick={() => handleVideoSelection(video.videoId)}
+                        sx={{ py: 1 }}
+                      >
+                        <Checkbox
+                          checked={selectedVideos.has(video.videoId)}
+                          onChange={() => handleVideoSelection(video.videoId)}
+                        />
+                        <ListItemText
+                          primary={video.title}
+                          secondary={`${formatTime(video.duration)} • ${index + 1}/${playlistInfo.totalVideos}`}
+                          sx={{ ml: 1 }}
+                        />
+                      </ListItemButton>
+                    </ListItem>
+                  ))}
+                </List>
+              </>
+            ) : null}
           </Box>
         </Card>
       )}
