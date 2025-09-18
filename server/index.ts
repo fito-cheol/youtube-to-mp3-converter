@@ -185,8 +185,17 @@ app.post('/api/convert', async (req: Request, res: Response) => {
       최종파일: finalOutputPath
     });
 
+    // 기존 파일이 있는지 확인
+    console.log('2. 기존 파일 확인 중...');
+    if (fs.existsSync(finalOutputPath)) {
+      console.log('기존 파일 발견:', finalOutputPath);
+      console.log('=== 기존 파일 사용 ===');
+      return res.json({ filePath: '/downloads/' + path.basename(finalOutputPath) });
+    }
+    console.log('기존 파일 없음, 새로 변환 진행');
+
     // 1. 전체 영상을 MP3로 다운로드
-    console.log('2. MP3 다운로드 시작...');
+    console.log('3. MP3 다운로드 시작...');
     await youtubeDl(url, {
       ...defaultOptions,
       extractAudio: true,
@@ -196,7 +205,7 @@ app.post('/api/convert', async (req: Request, res: Response) => {
     console.log('MP3 다운로드 완료');
 
     // 2. FFmpeg로 구간 자르기
-    console.log('3. FFmpeg로 구간 자르기 시작...');
+    console.log('4. FFmpeg로 구간 자르기 시작...');
     const duration = endTime && endTime > startTime ? endTime - startTime : undefined;
     const ffmpegArgs = [
       '-i', `"${fullOutputPath}"`,
