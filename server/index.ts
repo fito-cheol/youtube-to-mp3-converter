@@ -8,9 +8,18 @@ const fs = require('fs');
 const { promisify } = require('util');
 const youtubeDl = require('youtube-dl-exec');
 const { google } = require('googleapis');
+const { createServer } = require('http');
+const { Server } = require('socket.io');
 
 const execAsync = promisify(exec);
 const app = express();
+const server = createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "http://localhost:3000",
+    methods: ["GET", "POST"]
+  }
+});
 const port = process.env.BACK_PORT || 3001;
 
 // Sanitize a string to a safe Windows filename while preserving non-ASCII letters (e.g., Korean)
@@ -272,13 +281,22 @@ function formatTime(seconds: number): string {
 
 app.post('/api/convert', async (req: Request, res: Response) => {
   try {
-    const { url, startTime = 0, endTime } = req.body;
+    const { url, startTime = 0, endTime, socketId } = req.body;
     
     console.log('=== 변환 시작 ===');
-    console.log('요청 파라미터:', { url, startTime, endTime });
+    console.log('요청 파라미터:', { url, startTime, endTime, socketId });
+    
+    // WebSocket으로 변환 시작 알림
+    if (socketId) {
+      io.to(socketId).emit('conversion-started', { url, startTime, endTime });
+    }
     
     // 비디오 정보 가져오기
     console.log('1. YouTube 비디오 정보 가져오는 중...');
+    if (socketId) {
+      io.to(socketId).emit('conversion-progress', { step: 'video-info', message: '비디오 정보를 가져오는 중...' });
+    }
+    
     const info = await youtubeDl(url, {
       ...defaultOptions,
       dumpSingleJson: true
@@ -288,6 +306,14 @@ app.post('/api/convert', async (req: Request, res: Response) => {
       duration: info.duration,
       format: info.format
     });
+    
+    if (socketId) {
+      io.to(socketId).emit('conversion-progress', { 
+        step: 'video-info-complete', 
+        message: '비디오 정보 수집 완료',
+        videoInfo: { title: info.title, duration: info.duration }
+      });
+    }
     
     const videoTitle = sanitizeFilename(info.title);
     const fullOutputPath = path.join(uploadsDir, `${videoTitle}_full.mp3`);
@@ -299,15 +325,29 @@ app.post('/api/convert', async (req: Request, res: Response) => {
 
     // 기존 파일이 있는지 확인
     console.log('2. 기존 파일 확인 중...');
+    if (socketId) {
+      io.to(socketId).emit('conversion-progress', { step: 'check-existing', message: '기존 파일 확인 중...' });
+    }
+    
     if (fs.existsSync(finalOutputPath)) {
       console.log('기존 파일 발견:', finalOutputPath);
       console.log('=== 기존 파일 사용 ===');
+      if (socketId) {
+        io.to(socketId).emit('conversion-complete', { 
+          filePath: '/downloads/' + path.basename(finalOutputPath),
+          message: '기존 파일을 사용합니다.'
+        });
+      }
       return res.json({ filePath: '/downloads/' + path.basename(finalOutputPath) });
     }
     console.log('기존 파일 없음, 새로 변환 진행');
 
     // 1. 전체 영상을 MP3로 다운로드
     console.log('3. MP3 다운로드 시작...');
+    if (socketId) {
+      io.to(socketId).emit('conversion-progress', { step: 'downloading', message: 'MP3 다운로드 중...' });
+    }
+    
     await youtubeDl(url, {
       ...defaultOptions,
       extractAudio: true,
@@ -315,9 +355,17 @@ app.post('/api/convert', async (req: Request, res: Response) => {
       output: fullOutputPath
     });
     console.log('MP3 다운로드 완료');
+    
+    if (socketId) {
+      io.to(socketId).emit('conversion-progress', { step: 'downloading-complete', message: 'MP3 다운로드 완료' });
+    }
 
     // 2. FFmpeg로 구간 자르기
     console.log('4. FFmpeg로 구간 자르기 시작...');
+    if (socketId) {
+      io.to(socketId).emit('conversion-progress', { step: 'trimming', message: '오디오 구간 자르기 중...' });
+    }
+    
     const duration = endTime && endTime > startTime ? endTime - startTime : undefined;
     const ffmpegArgs = [
       '-i', `"${fullOutputPath}"`,
@@ -341,9 +389,21 @@ app.post('/api/convert', async (req: Request, res: Response) => {
       console.log('임시 파일 삭제 완료');
       
       console.log('=== 변환 완료 ===');
+      if (socketId) {
+        io.to(socketId).emit('conversion-complete', { 
+          filePath: '/downloads/' + path.basename(finalOutputPath),
+          message: '변환이 완료되었습니다!'
+        });
+      }
       res.json({ filePath: '/downloads/' + path.basename(finalOutputPath) });
     } catch (ffmpegError) {
       console.error('FFmpeg 에러 발생:', ffmpegError);
+      if (socketId) {
+        io.to(socketId).emit('conversion-error', { 
+          error: 'Failed to trim audio',
+          message: '오디오 구간 자르기 중 오류가 발생했습니다.'
+        });
+      }
       res.status(500).json({ error: 'Failed to trim audio' });
       // 에러 발생시 임시 파일들 정리
       if (fs.existsSync(fullOutputPath)) {
@@ -358,10 +418,25 @@ app.post('/api/convert', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('=== 변환 실패 ===');
     console.error('에러 상세:', error);
+    if (req.body.socketId) {
+      io.to(req.body.socketId).emit('conversion-error', { 
+        error: 'Failed to convert video',
+        message: '비디오 변환 중 오류가 발생했습니다.'
+      });
+    }
     res.status(500).json({ error: 'Failed to convert video' });
   }
 });
 
-app.listen(port, () => {
+// WebSocket 연결 처리
+io.on('connection', (socket: any) => {
+  console.log('Client connected:', socket.id);
+  
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
+  });
+});
+
+server.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 }); 

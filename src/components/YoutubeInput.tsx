@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { TextField, Button, Box, CircularProgress, Alert, Card, CardMedia, Slider, Typography, List, ListItem, ListItemText, ListItemButton, Checkbox, Divider } from '@mui/material';
+import { TextField, Button, Box, CircularProgress, Alert, Card, CardMedia, Slider, Typography, List, ListItem, ListItemText, ListItemButton, Checkbox, Divider, LinearProgress } from '@mui/material';
 import axios from 'axios';
+import { useWebSocket } from '../hooks/useWebSocket';
 
 interface YoutubeInputProps {
   onFileConverted: (filePath: string) => void;
@@ -36,6 +37,15 @@ export const YoutubeInput: React.FC<YoutubeInputProps> = ({ onFileConverted }) =
   const [selectedVideos, setSelectedVideos] = useState<Set<string>>(new Set());
   const [isPlaylist, setIsPlaylist] = useState(false);
   const [loadingPlaylist, setLoadingPlaylist] = useState(false);
+  
+  // WebSocket 훅 사용
+  const { 
+    isConnected, 
+    conversionProgress, 
+    conversionComplete, 
+    conversionError, 
+    getSocketId 
+  } = useWebSocket();
 
   const extractVideoId = (url: string) => {
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
@@ -169,6 +179,24 @@ export const YoutubeInput: React.FC<YoutubeInputProps> = ({ onFileConverted }) =
     }
   };
 
+  // WebSocket으로 변환 완료 받기
+  useEffect(() => {
+    if (conversionComplete) {
+      onFileConverted(conversionComplete.filePath);
+      setQueue(prev => prev.slice(1));
+      setLoading(false);
+    }
+  }, [conversionComplete, onFileConverted]);
+
+  // WebSocket으로 변환 에러 받기
+  useEffect(() => {
+    if (conversionError) {
+      setError(conversionError.message);
+      setQueue(prev => prev.slice(1));
+      setLoading(false);
+    }
+  }, [conversionError]);
+
   // Process queue sequentially
   useEffect(() => {
     const processNext = async () => {
@@ -180,23 +208,39 @@ export const YoutubeInput: React.FC<YoutubeInputProps> = ({ onFileConverted }) =
         const response = await axios.post('http://localhost:3001/api/convert', {
           url: next.url,
           startTime: next.timeRange.start,
-          endTime: next.timeRange.end
+          endTime: next.timeRange.end,
+          socketId: getSocketId() // WebSocket ID 전달
         });
-        onFileConverted(response.data.filePath);
+        // WebSocket으로 완료를 받으므로 여기서는 처리하지 않음
+        // onFileConverted(response.data.filePath);
       } catch (err) {
         console.error('Error converting video:', err);
         setError('Failed to convert a queued video. Continuing with next item.');
-      } finally {
         setQueue(prev => prev.slice(1));
         setLoading(false);
       }
     };
     processNext();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queue, loading]);
+  }, [queue, loading, getSocketId]);
 
   return (
     <Box component="form" onSubmit={handleSubmit} sx={{ mb: 4 }}>
+      {/* WebSocket 연결 상태 표시 */}
+      <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box
+          sx={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            backgroundColor: isConnected ? 'green' : 'red'
+          }}
+        />
+        <Typography variant="caption" color={isConnected ? 'green' : 'red'}>
+          {isConnected ? '실시간 연결됨' : '연결 끊김'}
+        </Typography>
+      </Box>
+
       <TextField
         fullWidth
         label="YouTube URL (Video or Playlist)"
@@ -281,6 +325,16 @@ export const YoutubeInput: React.FC<YoutubeInputProps> = ({ onFileConverted }) =
           )}
         </Card>
       )}
+      {/* 변환 진행률 표시 */}
+      {conversionProgress && (
+        <Card sx={{ mb: 2, p: 2 }}>
+          <Typography variant="subtitle2" gutterBottom>
+            {conversionProgress.message}
+          </Typography>
+          <LinearProgress />
+        </Card>
+      )}
+
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
@@ -288,7 +342,7 @@ export const YoutubeInput: React.FC<YoutubeInputProps> = ({ onFileConverted }) =
       )}
       {!!queue.length && (
         <Alert severity="info" sx={{ mb: 2 }}>
-          In queue: {queue.length} {queue.length === 1 ? 'item' : 'items'} {loading ? '(processing...)' : ''}
+          대기열: {queue.length}개 {queue.length === 1 ? '항목' : '항목'} {loading ? '(처리 중...)' : ''}
         </Alert>
       )}
       <Button
@@ -299,10 +353,10 @@ export const YoutubeInput: React.FC<YoutubeInputProps> = ({ onFileConverted }) =
         startIcon={loading ? <CircularProgress size={20} color="inherit" /> : null}
       >
         {isPlaylist 
-          ? `Add ${selectedVideos.size} Selected Videos to Queue`
+          ? `선택된 ${selectedVideos.size}개 비디오를 대기열에 추가`
           : loading 
-            ? 'Add to Queue' 
-            : 'Convert / Add to Queue'
+            ? '대기열에 추가' 
+            : '변환 / 대기열에 추가'
         }
       </Button>
     </Box>
