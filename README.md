@@ -8,6 +8,7 @@ A web application that allows users to convert YouTube videos to MP3 files. Buil
 - Simple and intuitive user interface
 - Download converted files directly from the browser
 - Server-side processing with FFmpeg
+- Paginated playlist support that loads the newest 50 videos first and lets you fetch older batches on demand
 
 ## Prerequisites
 
@@ -67,6 +68,8 @@ Make sure FFmpeg is properly installed and accessible in your system path. The a
 2. Click "Convert to MP3"
 3. Wait for the conversion to complete
 4. Click the download button to save the MP3 file
+
+> **Note:** When you paste a playlist URL the app now requests the newest 50 items first. Use the pagination controls in the playlist panel to browse older videos in additional 50-item pages.
 
 ## Tech Stack
 
