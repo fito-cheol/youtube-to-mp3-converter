@@ -76,8 +76,9 @@ const defaultOptions = {
   noCallHome: true,
   noCheckCertificate: true,
   preferFreeFormats: true,
-  youtubeSkipDashManifest: true,
   ffmpegLocation: ffmpegPath,
+  // SABR 스트리밍 문제 해결을 위한 옵션 (android 클라이언트 사용)
+  extractorArgs: "youtube:player_client=android",
 };
 
 interface PlaylistVideoCacheItem {
