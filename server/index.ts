@@ -78,6 +78,14 @@ const defaultOptions = {
   preferFreeFormats: true,
   youtubeSkipDashManifest: true,
   ffmpegLocation: ffmpegPath,
+  // 403 에러 방지를 위한 옵션들
+  userAgent:
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+  referer: "https://www.youtube.com/",
+  // m3u8 대신 다른 format 사용 (ffmpeg 사용)
+  noHlsPreferNative: true,
+  // 최고 품질 오디오 format 선택
+  format: "bestaudio/best",
 };
 
 interface PlaylistVideoCacheItem {

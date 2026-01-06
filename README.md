@@ -71,6 +71,20 @@ Make sure FFmpeg is properly installed and accessible in your system path. The a
 
 > **Note:** When you paste a playlist URL the app now requests the newest 50 items first. Use the pagination controls in the playlist panel to browse older videos in additional 50-item pages.
 
+## Troubleshooting
+
+### HTTP 403 Forbidden Error
+
+If you encounter an error like `ERROR: The downloaded file is empty` or `HTTP Error 403: Forbidden` when downloading videos, this is typically caused by YouTube API quota limitations or billing issues.
+
+**Solution:**
+- Check your Google Cloud Console to ensure your YouTube Data API is properly configured
+- Verify that billing is enabled for your Google Cloud project
+- Ensure your API key has sufficient quota remaining
+- If you see "The downloaded file is empty" errors, it may indicate that your YouTube Data API quota has been exceeded or billing is not properly set up
+
+For more information, visit the [YouTube Data API documentation](https://developers.google.com/youtube/v3/getting-started).
+
 ## Tech Stack
 
 - Frontend:
