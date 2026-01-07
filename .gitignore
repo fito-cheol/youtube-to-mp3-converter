@@ -41,3 +41,5 @@ ffmpeg.zip
 .vscode/
 *.swp
 *.swo 
+
+*log
