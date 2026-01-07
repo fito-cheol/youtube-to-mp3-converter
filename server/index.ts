@@ -82,6 +82,8 @@ const defaultOptions = {
   // m3u8와 m3u8_native 모두 제외, 더 많은 fallback 옵션 제공
   format:
     "bestaudio[ext=m4a][protocol!=m3u8][protocol!=m3u8_native]/bestaudio[ext=webm][protocol!=m3u8][protocol!=m3u8_native]/bestaudio[ext=mp4][protocol!=m3u8][protocol!=m3u8_native]/bestaudio[protocol!=m3u8][protocol!=m3u8_native]/best[protocol!=m3u8][protocol!=m3u8_native]/bestaudio/best",
+  // SABR 스트리밍 문제 해결을 위한 옵션 (android 클라이언트 사용)
+  extractorArgs: "youtube:player_client=android",
   userAgent:
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", // User-Agent 설정
 };
