@@ -75,17 +75,15 @@ const defaultOptions = {
   noWarnings: true,
   noCallHome: true,
   noCheckCertificate: true,
-  preferFreeFormats: true,
-  youtubeSkipDashManifest: true,
+  preferFreeFormats: false, // HLS 형식으로 이끌 수 있어서 비활성화
+  youtubeSkipDashManifest: false, // DASH manifest 사용 허용
   ffmpegLocation: ffmpegPath,
-  // 403 에러 방지를 위한 옵션들
+  // HLS를 명시적으로 제외하고 직접 다운로드 가능한 형식만 선택
+  // m3u8와 m3u8_native 모두 제외, 더 많은 fallback 옵션 제공
+  format:
+    "bestaudio[ext=m4a][protocol!=m3u8][protocol!=m3u8_native]/bestaudio[ext=webm][protocol!=m3u8][protocol!=m3u8_native]/bestaudio[ext=mp4][protocol!=m3u8][protocol!=m3u8_native]/bestaudio[protocol!=m3u8][protocol!=m3u8_native]/best[protocol!=m3u8][protocol!=m3u8_native]/bestaudio/best",
   userAgent:
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  referer: "https://www.youtube.com/",
-  // m3u8 대신 다른 format 사용 (ffmpeg 사용)
-  noHlsPreferNative: true,
-  // 최고 품질 오디오 format 선택
-  format: "bestaudio/best",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", // User-Agent 설정
 };
 
 interface PlaylistVideoCacheItem {
@@ -564,6 +562,10 @@ app.post("/api/convert", async (req: Request, res: Response) => {
       extractAudio: true,
       audioFormat: "mp3",
       output: fullOutputPath,
+      // HLS 대신 직접 다운로드 가능한 형식 강제 (protocol 필터로 HLS 제외)
+      // 더 많은 fallback 옵션 제공
+      format:
+        "bestaudio[ext=m4a][protocol!=m3u8][protocol!=m3u8_native]/bestaudio[ext=webm][protocol!=m3u8][protocol!=m3u8_native]/bestaudio[ext=mp4][protocol!=m3u8][protocol!=m3u8_native]/bestaudio[protocol!=m3u8][protocol!=m3u8_native]/best[protocol!=m3u8][protocol!=m3u8_native]/bestaudio/best",
     });
     console.log("MP3 다운로드 완료");
 

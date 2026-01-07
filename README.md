@@ -73,17 +73,30 @@ Make sure FFmpeg is properly installed and accessible in your system path. The a
 
 ## Troubleshooting
 
-### HTTP 403 Forbidden Error
+### HTTP 403 Forbidden Error (HLS Format Issue)
 
-If you encounter an error like `ERROR: The downloaded file is empty` or `HTTP Error 403: Forbidden` when downloading videos, this is typically caused by YouTube API quota limitations or billing issues.
+If you encounter an error like `ERROR: The downloaded file is empty` or `HTTP Error 403: Forbidden` when downloading videos, this may be caused by yt-dlp attempting to download HLS (m3u8) streaming formats, which YouTube often blocks.
 
 **Solution:**
+The application has been configured to automatically exclude HLS formats and prefer direct download formats. The following measures are in place:
+- HLS protocols (m3u8, m3u8_native) are explicitly excluded from format selection
+- Format filter prioritizes direct download formats (m4a, webm, mp4) over streaming formats
+- Multiple fallback options ensure compatibility with various video formats
+
+If you still encounter issues:
 - Check your Google Cloud Console to ensure your YouTube Data API is properly configured
 - Verify that billing is enabled for your Google Cloud project
 - Ensure your API key has sufficient quota remaining
-- If you see "The downloaded file is empty" errors, it may indicate that your YouTube Data API quota has been exceeded or billing is not properly set up
 
 For more information, visit the [YouTube Data API documentation](https://developers.google.com/youtube/v3/getting-started).
+
+### Recent Changes (HLS Format Fix)
+
+**2024-12-XX**: Fixed 403 Forbidden errors caused by HLS format downloads
+- Removed deprecated `hlsPreferNative` option
+- Removed `extractorArgs: "youtube:skip=hls"` which was preventing format extraction
+- Improved format filter with multiple fallback options to avoid HLS protocols
+- Added explicit protocol exclusions for m3u8 and m3u8_native formats
 
 ## Tech Stack
 
