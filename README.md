@@ -48,12 +48,14 @@ yarn install
 
 3. Start the development server:
 ```bash
-# Start both frontend and backend
-yarn dev
+# Start both frontend and backend simultaneously (recommended)
+yarn dev:all
+# or
+npm run dev:all
 
 # Or start them separately:
-yarn start    # Frontend
-yarn server   # Backend
+yarn dev      # Frontend only
+yarn server   # Backend only
 ```
 
 4. Open your browser and navigate to `http://localhost:3000`

@@ -40,7 +40,8 @@
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "server": "cross-env NODE_ENV=development BACK_PORT=3001 ts-node -P tsconfig.server.json server/index.ts"
+    "server": "cross-env NODE_ENV=development BACK_PORT=3001 ts-node -P tsconfig.server.json server/index.ts",
+    "dev:all": "concurrently -n \"FRONTEND,BACKEND\" -c \"cyan,magenta\" \"npm run dev\" \"npm run server\""
   },
   "eslintConfig": {
     "extends": [
