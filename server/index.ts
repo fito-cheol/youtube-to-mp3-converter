@@ -1,10 +1,10 @@
 import { Request, Response } from "express";
 import { youtube_v3 } from "googleapis";
-require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { exec } = require("child_process");
 const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 const fs = require("fs");
 const { promisify } = require("util");
 const youtubeDl = require("youtube-dl-exec");
@@ -46,10 +46,9 @@ const youtube = google.youtube("v3");
 const API_KEY = process.env.YOUTUBE_API_KEY;
 
 if (!API_KEY) {
-  console.error(
-    "YouTube API key is not set. Please set YOUTUBE_API_KEY in .env file"
+  console.warn(
+    "Warning: YouTube API key is not set. Some features may not work. Please set YOUTUBE_API_KEY in .env file"
   );
-  process.exit(1);
 }
 
 // FFmpeg 경로 설정
@@ -451,6 +450,121 @@ app.post("/api/playlist-info", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error fetching playlist info:", error);
     res.status(500).json({ error: "Failed to fetch playlist information" });
+  }
+});
+
+// YouTube 검색 API
+app.post("/api/search", async (req: Request, res: Response) => {
+  try {
+    if (!API_KEY) {
+      return res.status(500).json({ error: "YouTube API key is not configured" });
+    }
+
+    const { query, maxResults = 12 } = req.body;
+
+    if (!query || typeof query !== "string" || query.trim().length === 0) {
+      return res.status(400).json({ error: "Search query is required" });
+    }
+
+    console.log(`[search] Searching for: "${query}"`);
+
+    // YouTube Data API로 검색
+    const searchResponse: { data: youtube_v3.Schema$SearchListResponse } =
+      await youtube.search.list({
+        key: API_KEY,
+        part: ["snippet"],
+        q: query,
+        type: ["video"],
+        maxResults: Math.min(maxResults, 50), // 최대 50개로 제한
+      });
+
+    const items = searchResponse.data.items ?? [];
+
+    if (items.length === 0) {
+      return res.json({ results: [] });
+    }
+
+    // 비디오 ID 추출
+    const videoIds = items
+      .map((item: youtube_v3.Schema$SearchResult) => item.id?.videoId)
+      .filter((id: string | null | undefined): id is string => Boolean(id));
+
+    if (videoIds.length === 0) {
+      return res.json({ results: [] });
+    }
+
+    // 비디오 상세 정보 가져오기 (조회수, 재생시간 등)
+    const videosResponse: { data: youtube_v3.Schema$VideoListResponse } =
+      await youtube.videos.list({
+        key: API_KEY,
+        part: ["contentDetails", "statistics", "snippet"],
+        id: videoIds,
+      });
+
+    const videosMap = new Map<
+      string,
+      youtube_v3.Schema$Video | null | undefined
+    >();
+    (videosResponse.data.items ?? []).forEach((video: youtube_v3.Schema$Video | null | undefined) => {
+      if (video?.id) {
+        videosMap.set(video.id, video);
+      }
+    });
+
+    // 검색 결과 매핑
+    type SearchResultItem = {
+      videoId: string;
+      title: string;
+      channelTitle: string;
+      thumbnail: string;
+      publishedAt: string;
+      viewCount?: number;
+      duration?: number;
+      url: string;
+    };
+
+    const results: SearchResultItem[] = items
+      .map((item: youtube_v3.Schema$SearchResult): SearchResultItem | null => {
+        const videoId = item.id?.videoId;
+        if (!videoId) {
+          return null;
+        }
+
+        const video = videosMap.get(videoId);
+        const snippet = item.snippet;
+        const thumbnail =
+          snippet?.thumbnails?.high?.url ||
+          snippet?.thumbnails?.medium?.url ||
+          snippet?.thumbnails?.default?.url ||
+          "";
+
+        const duration = video?.contentDetails?.duration
+          ? convertYouTubeDuration(video.contentDetails.duration)
+          : undefined;
+
+        const viewCount = video?.statistics?.viewCount
+          ? parseInt(video.statistics.viewCount, 10)
+          : undefined;
+
+        return {
+          videoId,
+          title: snippet?.title || "Untitled",
+          channelTitle: snippet?.channelTitle || "Unknown Channel",
+          thumbnail,
+          publishedAt: snippet?.publishedAt || "",
+          viewCount,
+          duration,
+          url: `https://www.youtube.com/watch?v=${videoId}`,
+        };
+      })
+      .filter((result): result is SearchResultItem => result !== null);
+
+    console.log(`[search] Found ${results.length} results for "${query}"`);
+
+    res.json({ results });
+  } catch (error) {
+    console.error("Error searching YouTube:", error);
+    res.status(500).json({ error: "Failed to search YouTube videos" });
   }
 });
 
